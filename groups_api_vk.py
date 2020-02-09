@@ -1,7 +1,7 @@
 '''
 Вопросы преподавателю:
     1) Что нужно переделать, чтобы код был более "питоническим"?
-    2) Я сделал глобальную переменную errors - корзину, куда помещаю ошибки возникшие во время выполнения разных функций.
+    2) Я сделал глобальную переменную errors - "корзину", куда помещаю ошибки возникшие во время выполнения разных функций.
         Затем записываю содержимое "корзины" в файл errors.txt.
         Насколько это правильное решение?
     4) Почему работа под моим токеном выдает больше ошибок, чем работа под заданным токеном?
@@ -11,16 +11,16 @@
     2) Показывать прогресс процентами
     3) Восстанавливается если случился ReadTimeout
     4) Показывать в том числе группы, в которых есть общие друзья, но не более, чем N человек, где N задается в коде.
-    5) Если у пользователя больше 1000 групп, можно ограничиться первой тысячей
-
+    
 Что реализовано:
-1) класс User
-2) класс Group
-3) основной алгоритм задачи (вычитание множеств)
-4) выгрузка результата в файл
-5) Имя пользователя в качесвте входных данных
-6) Выводить ошибки в отдельный файл с описанием ошибки
-7) ПОказывать процесс точками
+    1) класс User
+    2) класс Group
+    3) основной алгоритм задачи (вычитание множеств)
+    4) выгрузка результата в файл
+    5) Имя пользователя в качесвте входных данных
+    6) Выводить ошибки в отдельный файл с описанием ошибки
+    7) ПОказывать процесс точками
+    8) ограничение 1000 групп на пользователя
 
 '''
 
@@ -36,10 +36,11 @@ USERS_URL, USERS_VERSION = 'https://api.vk.com/method/users.get', 5.89
 FRIENDS_URL, FRIENDS_VERSION = 'https://api.vk.com/method/friends.get', 5.8
 GROUPS_URL, GROUPS_VERSION = 'https://api.vk.com/method/groups.get', 5.61
 GROUP_URL, GROUP_VERSION = 'https://api.vk.com/method/groups.getById', 5.61
+MEMBERS_URL, MEMBERS_VERSION = 'https://api.vk.com/method/groups.getMembers', 5.9
 VK_URL = 'https://vk.com/'
 
 USER_ID = '392477722'
-##USER_ID = '209762'
+N = 2
 
 DELAY = 0.4
 
@@ -71,20 +72,36 @@ class Group():
             'fields': 'name,members_count',
             'v': GROUP_VERSION
         }
+        self.params_members = {
+            'access_token': token,
+            'group_id': group_id,
+            'filter': 'friends',
+            'v': MEMBERS_VERSION
+        }
         
     @property
-    def data(self):
+    def info(self):
 
         response = requests.get(
             GROUP_URL,
             self.params_group
         ).json()
- 
+
         return {
             'name': response['response'][0]['name'],
             'gid': response['response'][0]['id'],
             'members_count': response['response'][0]['members_count']            
         }
+
+    @property
+    def count_mutual_members(self):
+
+        response = requests.get(
+            MEMBERS_URL,
+            self.params_members
+        ).json()
+ 
+        return response['response']['count']
 
 class User(object):
 
@@ -104,6 +121,7 @@ class User(object):
             'access_token': token,
             'user_id': user_id,
             'extended': '0',
+            'count': 1000,
             'v': FRIENDS_VERSION,
         }
 
@@ -134,7 +152,7 @@ def main(token, user_id):
 
     result = user.groups_ids
 
-    #steps_count = len(user.friends_ids)
+    print('The analyzed group of friends of the user')
    
     for friend_id in user.friends_ids:
 
@@ -153,12 +171,26 @@ def main(token, user_id):
 
     print('')
 
+    print('The analyzed group of mutual friends')
+
+    for foo in user.groups_ids:
+
+        time.sleep(DELAY)
+
+        group = Group(token, foo)
+        if group.count_mutual_members <= N:
+            result.add(foo)
+        print('.', end='')  
+
+    print('')
+
     'Putting the results in the files'
     data = []
     with open('output.json', 'w') as file:
         for foo in result:
-            item = Group(token, foo)
-            data.append(item.data)
+            time.sleep(DELAY)
+            group = Group(token, foo)
+            data.append(group.info)
         json.dump(data, file, ensure_ascii=False, indent=4)
 
     if len(errors) > 0:
