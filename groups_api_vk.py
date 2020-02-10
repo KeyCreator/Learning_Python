@@ -4,13 +4,15 @@
     2) Я сделал глобальную переменную errors - "корзину", куда помещаю ошибки возникшие во время выполнения разных функций.
         Затем записываю содержимое "корзины" в файл errors.txt.
         Насколько это правильное решение?
-    4) Почему работа под моим токеном выдает больше ошибок, чем работа под заданным токеном?
+    3) Нужна помощь в 195-ой строке кода. Для нормального отображения строки с процентами нужно возвращать курсор в начало строки. Но почему-то литерал '\r' не срабаывает
+    4) Как исскуственно вызвать исключение ReadTimeout?
+    5) Почему работа под моим токеном выдает больше ошибок, чем работа под заданным токеном?
 
 Что нужно реализовать:
     1) Использовать execute для ускорения работы
     2) Показывать прогресс процентами
     3) Восстанавливается если случился ReadTimeout
-    4) Показывать в том числе группы, в которых есть общие друзья, но не более, чем N человек, где N задается в коде.
+ 
     
 Что реализовано:
     1) класс User
@@ -21,6 +23,7 @@
     6) Выводить ошибки в отдельный файл с описанием ошибки
     7) ПОказывать процесс точками
     8) ограничение 1000 групп на пользователя
+    9) Показывать в том числе группы, в которых есть общие друзья, но не более, чем N человек, где N задается в коде.
 
 '''
 
@@ -29,6 +32,8 @@ import requests
 from urllib.parse import urlencode
 import time
 import json
+
+N = 0
 
 TOKEN = '73eaea320bdc0d3299faa475c196cfea1c4df9da4c6d291633f9fe8f83c08c4de2a3abf89fbc3ed8a44e1'
 AUTH_URL, AUTH_VERSION = 'https://oauth.vk.com/authorize', 5.52
@@ -40,7 +45,7 @@ MEMBERS_URL, MEMBERS_VERSION = 'https://api.vk.com/method/groups.getMembers', 5.
 VK_URL = 'https://vk.com/'
 
 USER_ID = '392477722'
-N = 2
+
 
 DELAY = 0.4
 
@@ -149,38 +154,46 @@ def main(token, user_id):
     '''
 
     user = User(token, user_id)
+    result = set()
 
-    result = user.groups_ids
-
-    print('The analyzed group of friends of the user')
-   
-    for friend_id in user.friends_ids:
-
-        time.sleep(DELAY)
-            
-        friend = User(token, friend_id)
-
-        try:
-            friend_groups = friend.groups_ids
-        except:
-            continue
-        finally:
-            print('.', end='')            
-            
-        result -= friend_groups
-
-    print('')
+##    result = user.groups_ids
+##
+##    print('The analyzed group of friends of the user')
+##   
+##    for friend_id in user.friends_ids:
+##
+##        time.sleep(DELAY)
+##            
+##        friend = User(token, friend_id)
+##
+##        try:
+##            friend_groups = friend.groups_ids
+##        except:
+##            continue
+##        finally:
+##            print('.', end='')            
+##            
+##        result -= friend_groups
+##
+##    print('')
 
     print('The analyzed group of mutual friends')
 
-    for foo in user.groups_ids:
+    groups_set = user.groups_ids
+
+    percent = 100 / len(groups_set)
+    progress = 0
+
+    for foo in groups_set:
 
         time.sleep(DELAY)
-
+        
         group = Group(token, foo)
         if group.count_mutual_members <= N:
             result.add(foo)
-        print('.', end='')  
+
+        progress += percent
+        print('Processing is completed at %3d%%' % progress, end = '\r', flush = True)
 
     print('')
 
