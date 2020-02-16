@@ -107,11 +107,7 @@ def main(user_id):
     result = set()
 
     print('Step 1 of 4: Getting a list of user groups...', end='')
-    try:
-        groups = user.groups_ids
-    except TimeoutError as Error:
-        print(Error)
-        return
+    groups = user.groups_ids
     print('OK')
 
     print('Step 2 of 4: Filter groups by the number of shared friends ',
@@ -156,10 +152,16 @@ if __name__ == '__main__':
 
     if user_id:
 
-        groups_set = main(user_id)
+        try:
 
-        if len(groups_set) == 0:
-            print('The user has no secrets from their friends :-)')
+            groups_set = main(user_id)
+            if len(groups_set) == 0:
+                print('The user has no secrets from their friends :-)')
+
+        except TimeoutError as Error:
+            print(Error)
+
+
 
     else:
         print(f'{input_id} is not valid user id. The program was interrupted.')
