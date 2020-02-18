@@ -1,236 +1,167 @@
-'''
-Вопросы преподавателю:
-    1) Что нужно переделать, чтобы код был более "питоническим"?
-    2) Я сделал глобальную переменную errors - "корзину", куда помещаю ошибки возникшие во время выполнения разных функций.
-        Затем записываю содержимое "корзины" в файл errors.txt.
-        Насколько это правильное решение?
-    3) Нужна помощь в 195-ой строке кода. Для нормального отображения строки с процентами нужно возвращать курсор в начало строки. Но почему-то литерал '\r' не срабаывает
-    4) Как исскуственно вызвать исключение ReadTimeout?
-    5) Почему работа под моим токеном выдает больше ошибок, чем работа под заданным токеном?
-
-Что нужно реализовать:
-    1) Использовать execute для ускорения работы
-    2) Показывать прогресс процентами
-    3) Восстанавливается если случился ReadTimeout
- 
-    
-Что реализовано:
-    1) класс User
-    2) класс Group
-    3) основной алгоритм задачи (вычитание множеств)
-    4) выгрузка результата в файл
-    5) Имя пользователя в качесвте входных данных
-    6) Выводить ошибки в отдельный файл с описанием ошибки
-    7) ПОказывать процесс точками
-    8) ограничение 1000 групп на пользователя
-    9) Показывать в том числе группы, в которых есть общие друзья, но не более, чем N человек, где N задается в коде.
-
-'''
-
-
 import requests
-from urllib.parse import urlencode
 import time
 import json
 
 N = 0
 
 TOKEN = '73eaea320bdc0d3299faa475c196cfea1c4df9da4c6d291633f9fe8f83c08c4de2a3abf89fbc3ed8a44e1'
-AUTH_URL, AUTH_VERSION = 'https://oauth.vk.com/authorize', 5.52
-USERS_URL, USERS_VERSION = 'https://api.vk.com/method/users.get', 5.89
-FRIENDS_URL, FRIENDS_VERSION = 'https://api.vk.com/method/friends.get', 5.8
-GROUPS_URL, GROUPS_VERSION = 'https://api.vk.com/method/groups.get', 5.61
-GROUP_URL, GROUP_VERSION = 'https://api.vk.com/method/groups.getById', 5.61
-MEMBERS_URL, MEMBERS_VERSION = 'https://api.vk.com/method/groups.getMembers', 5.9
-VK_URL = 'https://vk.com/'
-
+EXECUTE_URL, EXECUTE_VERSION = 'https://api.vk.com/method/execute', 5.8
 USER_ID = '392477722'
 
 
-DELAY = 0.4
+class TimeoutError(Exception):
+    def __init__(self, text):
+        self.txt = text
 
-errors = []
 
-def check_valid_user_id(token, user_id):
-    params = {
-        'access_token': token,
-        'user_ids': user_id,
-        'v': USERS_VERSION
-    }
-    response = requests.get(
-        USERS_URL,
-        params
-    ).json()
+def run_vk_api_execute(method, arguments):
 
-    if 'error' in response: return
-    
-    return response['response'][0]['id']
+    response_result = []
+    code = ''
+    counter = 1
+    total = len(arguments)
 
-class Group():
+    for argument in arguments:
 
-    def __init__(self, token, group_id):
-        self.group_id = group_id
-        self.token = token
-        self.params_group = {
-            'access_token': token,
-            'group_id': group_id,
-            'fields': 'name,members_count',
-            'v': GROUP_VERSION
-        }
-        self.params_members = {
-            'access_token': token,
-            'group_id': group_id,
-            'filter': 'friends',
-            'v': MEMBERS_VERSION
-        }
-        
-    @property
-    def info(self):
+        if len(code) > 0:
+            code += ','
 
-        response = requests.get(
-            GROUP_URL,
-            self.params_group
-        ).json()
+        argument_str = ''
+        for key in argument:
+            if len(argument_str) > 0:
+                argument_str += ','
+            argument_str += f'\'{key}\': \'{argument[key]}\''
+        code += f'API.{method}({{{argument_str}}})'
 
-        return {
-            'name': response['response'][0]['name'],
-            'gid': response['response'][0]['id'],
-            'members_count': response['response'][0]['members_count']            
-        }
+        if counter % 25 == 0 or counter == total:
+            code = f'return [{code}];'
 
-    @property
-    def count_mutual_members(self):
+            try: # FIX при выставлении timeout=0.01 "ловить" исключение. Сейчас этого почему-то не получается
 
-        response = requests.get(
-            MEMBERS_URL,
-            self.params_members
-        ).json()
- 
-        return response['response']['count']
+                response = requests.post(url=EXECUTE_URL,
+                                         data={
+                                             "code": code,
+                                             "access_token": TOKEN,
+                                             "v": EXECUTE_VERSION
+                                             },
+##                                         timeout=0.01
+                                         )
+                'accumulating query results'
+                response_result += response.json()['response']
+            except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectTimeout):
+                raise TimeoutError('Response timeout exceeded, check the connection')
+
+            code = ''
+
+        counter += 1
+
+
+    if len(response_result) == 1 and len(response_result[0]) == 0:
+        return
+    else:
+        return response_result
+
+
+def get_valid_user_id(user_id):
+
+    data = run_vk_api_execute(
+        'users.get',
+        [{'user_ids': user_id}]
+    )
+
+    if data is None:
+        return
+    else:
+        return data[0][0]['id']
+
 
 class User(object):
 
-    def __init__(self, token, user_id):
+    def __init__(self, user_id):
         self.user_id = user_id
-        self.token = token
-
-        self.params_friends = {
-            'access_token': token,
-            'user_id': user_id,
-            'order': 'name',
-            'fields': 'nickname',
-            'v': FRIENDS_VERSION,
-        }
-
-        self.params_groups = {
-            'access_token': token,
-            'user_id': user_id,
-            'extended': '0',
-            'count': 1000,
-            'v': FRIENDS_VERSION,
-        }
 
     @property
-    def friends_ids(self):
-        response = requests.get(
-            FRIENDS_URL,
-            self.params_friends
-        ).json()
-        return set([foo['id'] for foo in response['response']['items']])
-
-    @property    
     def groups_ids(self):
-        response = requests.get(
-            GROUPS_URL,
-            self.params_groups
-        ).json()
-        if 'error' in response:
-            errors.append(f"it is not possible to get a list of groups from the user id {self.user_id}: {response['error']['error_msg']}")
-        return set(response['response']['items'])
-    
-def main(token, user_id):
+
+        data = run_vk_api_execute(
+            'groups.get',
+            [{
+                'user_id': user_id,
+                'extended': '0',
+                'count': 1000,
+            }]
+        )
+
+        if data is None:
+            return
+        else:
+            return data[0]['items']
+
+
+def main(user_id):
     '''
     the main algorithm of the problem
     '''
 
-    user = User(token, user_id)
+    user = User(user_id)
     result = set()
 
-##    result = user.groups_ids
-##
-##    print('The analyzed group of friends of the user')
-##   
-##    for friend_id in user.friends_ids:
-##
-##        time.sleep(DELAY)
-##            
-##        friend = User(token, friend_id)
-##
-##        try:
-##            friend_groups = friend.groups_ids
-##        except:
-##            continue
-##        finally:
-##            print('.', end='')            
-##            
-##        result -= friend_groups
-##
-##    print('')
+    print('Step 1 of 4: Getting a list of user groups...', end='')
+    groups = user.groups_ids
+    print('OK')
 
-    print('The analyzed group of mutual friends')
+    print('Step 2 of 4: Filter groups by the number of shared friends ',
+          f'({N} or less)...', end='')
+    data = run_vk_api_execute(
+        'groups.getMembers',
+        [{'group_id': group, 'filter': 'friends'} for group in groups]
+    )
+    
+    for group, item in zip(groups, data):
+        if not isinstance(item, bool):
+            if item['count'] <= N:
+                result.add(group)
+    print('OK')
 
-    groups_set = user.groups_ids
+    print('Step 3 of 4: Getting information about the selected groups...', end='')
+    group_info = run_vk_api_execute(
+        'groups.getById',
+        [{'group_id': group, 'fields': 'name,members_count'} for group in result]
+    )
+    print('OK')
 
-    percent = 100 / len(groups_set)
-    progress = 0
-
-    for foo in groups_set:
-
-        time.sleep(DELAY)
-        
-        group = Group(token, foo)
-        if group.count_mutual_members <= N:
-            result.add(foo)
-
-        progress += percent
-        print('Processing is completed at %3d%%' % progress, end = '\r', flush = True)
-
-    print('')
-
-    'Putting the results in the files'
+    print('Step 4 of 4: Putting the results in the file output.json...', end='')
     data = []
     with open('output.json', 'w') as file:
-        for foo in result:
-            time.sleep(DELAY)
-            group = Group(token, foo)
-            data.append(group.info)
+        for foo in group_info:
+            data.append({
+                'name': foo[0]['name'],
+                'gid': foo[0]['id'],
+                'members_count': foo[0]['members_count']
+            })
         json.dump(data, file, ensure_ascii=False, indent=4)
+    print('OK')
+    return result
 
-    if len(errors) > 0:
-        with open('errors.txt', 'w') as file:
-            for error in errors:
-                file.write(f'{error}\n')
-
-    return result  
-   
 
 if __name__ == '__main__':
 
     input_id = input(f'Please enter user ID (Enter - {USER_ID}): ').strip()
 
-    user_id = check_valid_user_id(TOKEN, input_id if input_id != '' else USER_ID)
+    user_id = get_valid_user_id(input_id if input_id != '' else USER_ID)
 
     if user_id:
-        groups_set = main(TOKEN, user_id)
+
+        try:
+
+            groups_set = main(user_id)
+            if len(groups_set) == 0:
+                print('The user has no secrets from their friends :-)')
+
+        except TimeoutError as Error:
+            print(Error)
+
+
+
     else:
         print(f'{input_id} is not valid user id. The program was interrupted.')
-
-    if len(groups_set) >0:
-        print(f'The list of groups in the VK that the user is in, but none of his friends are in, is displayed in the file output.txt')
-    else:
-        print('The user has no secrets from their friends :-)')
-        
-    if len(errors) > 0: print('Some of the user information was not processed, see the file errors.txt')
-
-        
-
