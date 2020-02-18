@@ -1,5 +1,4 @@
 import requests
-import time
 import json
 
 N = 0
@@ -15,7 +14,6 @@ class TimeoutError(Exception):
 
 
 def run_vk_api_execute(method, arguments):
-
     response_result = []
     code = ''
     counter = 1
@@ -26,25 +24,26 @@ def run_vk_api_execute(method, arguments):
         if len(code) > 0:
             code += ','
 
-        argument_str = ''
-        for key in argument:
-            if len(argument_str) > 0:
-                argument_str += ','
-            argument_str += f'\'{key}\': \'{argument[key]}\''
-        code += f'API.{method}({{{argument_str}}})'
+        # argument_str = ''
+        # for key in argument:
+        #     if len(argument_str) > 0:
+        #         argument_str += ','
+        #     argument_str += f'\'{key}\': \'{argument[key]}\''
+        # code += f'API.{method}({{{argument_str}}})'
+        code += ','.join('{}: {}'.format(k, v) for k, v argument.items())
 
         if counter % 25 == 0 or counter == total:
             code = f'return [{code}];'
 
-            try: # FIX при выставлении timeout=0.01 "ловить" исключение. Сейчас этого почему-то не получается
+            try:  # FIX при выставлении timeout=0.01 "ловить" исключение. Сейчас этого почему-то не получается
 
                 response = requests.post(url=EXECUTE_URL,
                                          data={
                                              "code": code,
                                              "access_token": TOKEN,
                                              "v": EXECUTE_VERSION
-                                             },
-##                                         timeout=0.01
+                                         },
+                                         # timeout=0.01
                                          )
                 'accumulating query results'
                 response_result += response.json()['response']
@@ -55,21 +54,19 @@ def run_vk_api_execute(method, arguments):
 
         counter += 1
 
-
-    if len(response_result) == 1 and len(response_result[0]) == 0:
+    if len(response_result) == 1 and not response_result[0]:  # TODO: remove condition
         return
     else:
         return response_result
 
 
 def get_valid_user_id(user_id):
-
     data = run_vk_api_execute(
         'users.get',
         [{'user_ids': user_id}]
     )
 
-    if data is None:
+    if data is None:  # TODO: data and not data[0]
         return
     else:
         return data[0][0]['id']
@@ -92,7 +89,7 @@ class User(object):
             }]
         )
 
-        if data is None:
+        if data is None:  # TODO: data and not data[0]
             return
         else:
             return data[0]['items']
@@ -116,7 +113,7 @@ def main(user_id):
         'groups.getMembers',
         [{'group_id': group, 'filter': 'friends'} for group in groups]
     )
-    
+
     for group, item in zip(groups, data):
         if not isinstance(item, bool):
             if item['count'] <= N:
@@ -147,8 +144,9 @@ def main(user_id):
 if __name__ == '__main__':
 
     input_id = input(f'Please enter user ID (Enter - {USER_ID}): ').strip()
-
-    user_id = get_valid_user_id(input_id if input_id != '' else USER_ID)
+    input_id = input_id if input_id else USER_ID
+    # input_id = input_id or USER_ID
+    get_valid_user_id(input_id)
 
     if user_id:
 
@@ -160,8 +158,6 @@ if __name__ == '__main__':
 
         except TimeoutError as Error:
             print(Error)
-
-
 
     else:
         print(f'{input_id} is not valid user id. The program was interrupted.')
