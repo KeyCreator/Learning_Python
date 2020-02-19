@@ -1,9 +1,10 @@
 import requests
 import json
+import os
 
 N = 0
 
-TOKEN = '73eaea320bdc0d3299faa475c196cfea1c4df9da4c6d291633f9fe8f83c08c4de2a3abf89fbc3ed8a44e1'
+TOKEN = os.getenv('VK_TOKEN')
 EXECUTE_URL, EXECUTE_VERSION = 'https://api.vk.com/method/execute', 5.8
 USER_ID = '392477722'
 
@@ -16,48 +17,38 @@ class TimeoutError(Exception):
 def run_vk_api_execute(method, arguments):
     response_result = []
     code = ''
-    counter = 1
+    counter = 0
     total = len(arguments)
 
     for argument in arguments:
 
-        if len(code) > 0:
-            code += ','
+        if code: code += ','
 
-        # argument_str = ''
-        # for key in argument:
-        #     if len(argument_str) > 0:
-        #         argument_str += ','
-        #     argument_str += f'\'{key}\': \'{argument[key]}\''
-        # code += f'API.{method}({{{argument_str}}})'
-        code += ','.join('{}: {}'.format(k, v) for k, v argument.items())
-
-        if counter % 25 == 0 or counter == total:
-            code = f'return [{code}];'
-
-            try:  # FIX при выставлении timeout=0.01 "ловить" исключение. Сейчас этого почему-то не получается
-
-                response = requests.post(url=EXECUTE_URL,
-                                         data={
-                                             "code": code,
-                                             "access_token": TOKEN,
-                                             "v": EXECUTE_VERSION
-                                         },
-                                         # timeout=0.01
-                                         )
-                'accumulating query results'
-                response_result += response.json()['response']
-            except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectTimeout):
-                raise TimeoutError('Response timeout exceeded, check the connection')
-
-            code = ''
+        argument_str = ','.join('\'{}\': \'{}\''.format(k, v) for k, v in argument.items())
+        code += f'API.{method}({{{argument_str}}})'
 
         counter += 1
 
-    if len(response_result) == 1 and not response_result[0]:  # TODO: remove condition
-        return
-    else:
-        return response_result
+        if not (counter % 25) or counter < total:
+            continue
+
+        code = f'return [{code}];'
+        try:
+            response = requests.post(url=EXECUTE_URL,
+                                     data={
+                                         "code": code,
+                                         "access_token": TOKEN,
+                                         "v": EXECUTE_VERSION
+                                     },
+                                     #  timeout=0.05
+                                     )
+            'accumulating query results'
+            response_result += response.json()['response']
+        except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectTimeout):
+            raise TimeoutError('Response timeout exceeded, check the connection')
+        code = ''
+
+    return response_result
 
 
 def get_valid_user_id(user_id):
@@ -66,7 +57,7 @@ def get_valid_user_id(user_id):
         [{'user_ids': user_id}]
     )
 
-    if data is None:  # TODO: data and not data[0]
+    if data and not data[0]:
         return
     else:
         return data[0][0]['id']
@@ -89,15 +80,15 @@ class User(object):
             }]
         )
 
-        if data is None:  # TODO: data and not data[0]
+        if data and not data[0]:
             return
         else:
             return data[0]['items']
 
 
 def main(user_id):
-    '''
-    the main algorithm of the problem
+    ''' The main algorithm of the problem
+
     '''
 
     user = User(user_id)
@@ -144,16 +135,16 @@ def main(user_id):
 if __name__ == '__main__':
 
     input_id = input(f'Please enter user ID (Enter - {USER_ID}): ').strip()
-    input_id = input_id if input_id else USER_ID
     # input_id = input_id or USER_ID
-    get_valid_user_id(input_id)
+    input_id = input_id if input_id else USER_ID
+    user_id = get_valid_user_id(input_id)
 
     if user_id:
 
         try:
 
             groups_set = main(user_id)
-            if len(groups_set) == 0:
+            if not groups_set:
                 print('The user has no secrets from their friends :-)')
 
         except TimeoutError as Error:
